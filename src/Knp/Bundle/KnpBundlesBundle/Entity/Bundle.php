@@ -185,14 +185,14 @@ class Bundle
      * @ORM\Column(type="boolean")
      */
     protected $usesTravisCi = false;
-	
+
     /**
      * Travis Ci last build status
      *
      * @ORM\Column(type="boolean", nullable=true)
      */
     protected $travisCiBuildStatus = null;
-        
+
     /**
      * Trend over the last day. Max is better.
      * @ORM\Column(type="integer")
@@ -205,7 +205,7 @@ class Bundle
      * @ORM\Column(type="string", length=255, nullable=true)
      */
     protected $composerName = null;
-    
+
     public function __construct($fullName = null)
     {
         if ($fullName) {
@@ -327,7 +327,7 @@ class Bundle
     {
         $this->composerName = $name;
     }
-    
+
     /**
      * Get tags
      *
@@ -442,6 +442,39 @@ class Bundle
     }
 
     /**
+     * Returns details about the bundle's score
+     */
+    public function getScoreDetails()
+    {
+        $score = array(
+            // 1 follower = 1 point
+            'followers'    => $this->getNbFollowers(),
+
+            // Small boost for recently updated bundles
+            'activity'     => ($this->getDaysSinceLastCommit() < 30)
+                ? (30 - $this->getDaysSinceLastCommit() / 5)
+                : 0,
+
+            // Small boost for bundles that have a real README file
+            'readme'       => mb_strlen($this->getReadme()) > 300 ? 5 : 0,
+
+            // Small boost for bundles that uses travis ci
+            'travisci'     => $this->getUsesTravisCi() ? 5 : 0,
+
+            // Small boost for bundles with passing tests according to Travis
+            'travisbuild'  => $this->getTravisCiBuildStatus() ? 5 : 0,
+
+            // Small boost for repos that provide composer package
+            'composer'     => $this->getComposerName() ? 5 : 0,
+
+            // Small boost for repos that have recommenders recommending it
+            'recommenders' => 5 * $this->getNbRecommenders(),
+        );
+
+        return $score;
+    }
+
+    /**
      * Calculate the score of this bundle based on several factors.
      *
      * The score is used as the default sort field in many places.
@@ -449,36 +482,7 @@ class Bundle
      */
     public function recalculateScore()
     {
-        // 1 follower = 1 point
-        $score = $this->getNbFollowers();
-
-        // Small boost for recently updated bundles
-        if ($this->getDaysSinceLastCommit() < 30) {
-            $score += (30 - $this->getDaysSinceLastCommit()) / 5;
-        }
-
-        // Small boost for bundles that have a real README file
-        if (mb_strlen($this->getReadme()) > 300) {
-            $score += 5;
-        }
-
-        // Small boost for bundles that uses travis ci
-        if ($this->getUsesTravisCi()) {
-            $score += 5;
-        }
-
-        // Small boost for bundles with passing tests according to Travis
-        if ($this->getTravisCiBuildStatus()) {
-            $score += 5;
-        }
-
-        // Small boost for repos that provide composer package
-        if ($this->getComposerName()) {
-            $score += 5;
-        }
-
-        // Small boost for repos that have recommenders recommending it
-        $score += 5*$this->getNbRecommenders();
+        $score = array_sum($this->getScoreDetails());
 
         $this->setScore($score);
     }
@@ -595,7 +599,7 @@ class Bundle
     {
         return $this->getComposerName() ? sprintf('http://packagist.org/packages/%s', $this->getComposerName()) : false;
     }
-    
+
     /**
      * Get the Git repo url
      *
